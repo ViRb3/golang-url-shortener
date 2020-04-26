@@ -1,0 +1,64 @@
+kind: pipeline
+name: build
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+  - name: build-frontend
+    image: node:13
+    commands:
+      - cd web
+      - yarn install
+      - yarn build
+      - rm build/static/**/*.map
+
+  - name: embed-frontend
+    image: golang
+    volumes:
+      - name: deps
+        path: /tmp/gopath/
+    commands:
+      # prepare fake GOPATH
+      - mkdir -p /tmp/gopath/src/github.com/mxschmitt/
+      - ln -s "$PWD" /tmp/gopath/src/github.com/mxschmitt/golang-url-shortener
+      - export GOPATH="/tmp/gopath"
+      - export PATH="$PATH:$GOPATH/bin"
+      - cd /tmp/gopath/src/github.com/mxschmitt/golang-url-shortener/
+      # install dependencies
+      - go get github.com/gobuffalo/packr/v2/packr2
+      - go install github.com/gobuffalo/packr/v2/packr2
+      - go get ./...
+      # Workaround for: https://github.com/sirupsen/logrus/issues/824
+      - GOOS=windows go get ./...
+      # embed frontend
+      - cd cmd/golang-url-shortener
+      - packr2
+
+  - name: fetch
+    image: alpine/git
+    commands:
+      - git fetch origin refs/tags/"$DRONE_TAG":refs/tags/"$DRONE_TAG"
+    when:
+      event: tag
+
+  - name: release
+    image: golang
+    environment:
+      GITHUB_TOKEN:
+        from_secret: github_token
+    volumes:
+      - name: deps
+        path: /tmp/gopath/
+    commands:
+      # set fake GOPATH
+      - export GOPATH="/tmp/gopath"
+      # release
+      - curl -sL https://git.io/goreleaser | bash
+    when:
+      event: tag
+
+volumes:
+  - name: deps
+    temp: {}
