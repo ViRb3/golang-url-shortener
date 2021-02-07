@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/mxschmitt/golang-url-shortener/internal/util"
@@ -73,7 +74,7 @@ func (a *oktaAdapter) GetUserData(state, code string) (*user, error) {
 		return nil, errors.Wrap(err, "decoding user info failed")
 	}
 	return &user{
-		ID:      string(oUser.ID),
+		ID:      strconv.Itoa(oUser.ID),
 		Name:    oUser.Name,
 		Picture: util.GetConfig().BaseURL + "/images/okta_logo.png", // Default Okta Avatar
 	}, nil

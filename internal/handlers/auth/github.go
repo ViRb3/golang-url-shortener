@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/mxschmitt/golang-url-shortener/internal/util"
 	"github.com/sirupsen/logrus"
@@ -63,7 +64,7 @@ func (a *githubAdapter) GetUserData(state, code string) (*user, error) {
 		return nil, errors.Wrap(err, "decoding user info failed")
 	}
 	return &user{
-		ID:      string(gUser.ID),
+		ID:      strconv.Itoa(gUser.ID),
 		Name:    gUser.Name,
 		Picture: gUser.AvatarURL + "&s=64",
 	}, nil
