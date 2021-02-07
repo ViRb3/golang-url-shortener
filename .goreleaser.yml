@@ -1,6 +1,8 @@
+before:
+  hooks:
+    - ./prepare.sh
 builds:
   - #
-    dir: cmd/golang-url-shortener
     env:
       - CGO_ENABLED=0
     ldflags:
