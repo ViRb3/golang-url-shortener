@@ -3,14 +3,15 @@ package handlers
 
 import (
 	"fmt"
+	"github.com/mxschmitt/golang-url-shortener/web"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gobuffalo/packr/v2"
 	"github.com/mxschmitt/golang-url-shortener/internal/stores"
 	"github.com/mxschmitt/golang-url-shortener/internal/util"
 	"github.com/pkg/errors"
@@ -30,8 +31,6 @@ var DoNotPrivateKeyChecking = false
 type loggerEntryWithFields interface {
 	WithFields(fields logrus.Fields) *logrus.Entry
 }
-
-var templateBox = packr.New("Templates", "./tmpls")
 
 // Ginrus returns a gin.HandlerFunc (middleware) that logs requests using logrus.
 //
@@ -111,21 +110,29 @@ func New(store stores.Store) (*Handler, error) {
 	return h, nil
 }
 
-func (h *Handler) addTemplatesFromFS(files []string) error {
+func (h *Handler) addTemplatesFromFS(FS fs.FS) error {
+	files, err := fs.ReadDir(FS, ".")
+	if err != nil {
+		return errors.Wrap(err, "could not read filesystem")
+	}
 	var t *template.Template
 	for _, file := range files {
-		fileContent, err := templateBox.FindString("/" + file)
+		if file.IsDir() {
+			continue
+		}
+		fileBytes, err := fs.ReadFile(FS, file.Name())
 		if err != nil {
 			return errors.Wrap(err, "could not read template file")
 		}
+		fileContent := string(fileBytes)
 		if t == nil {
-			t, err = template.New(file).Parse(fileContent)
+			t, err = template.New(file.Name()).Parse(fileContent)
 			if err != nil {
 				return errors.Wrap(err, "could not create template from file content")
 			}
 			continue
 		}
-		if _, err := t.New(file).Parse(fileContent); err != nil {
+		if _, err := t.New(file.Name()).Parse(fileContent); err != nil {
 			return errors.Wrap(err, "could not parse template")
 		}
 	}
@@ -133,8 +140,13 @@ func (h *Handler) addTemplatesFromFS(files []string) error {
 	return nil
 }
 
+type SeekableFile interface {
+	fs.File
+	Seek(offset int64, whence int) (int64, error)
+}
+
 func (h *Handler) setHandlers() error {
-	if err := h.addTemplatesFromFS([]string{"token.html", "protected.html"}); err != nil {
+	if err := h.addTemplatesFromFS(TmplFS); err != nil {
 		return errors.Wrap(err, "could not add templates from FS")
 	}
 	// only do web access logs if enabled
@@ -168,10 +180,8 @@ func (h *Handler) setHandlers() error {
 	h.engine.GET("/d/:id/:hash", h.handleDelete)
 	h.engine.GET("/ok", h.handleHealthcheck)
 
-	assetBox := packr.New("Assets", "../../web/build")
-
 	h.engine.GET("/", func(c *gin.Context) {
-		f, err := assetBox.Open("index.html")
+		f, err := web.BuildFS.Open("index.html")
 		if err != nil {
 			http.Error(c.Writer, fmt.Sprintf("could not open index.html: %v", err), http.StatusInternalServerError)
 			return
@@ -181,7 +191,7 @@ func (h *Handler) setHandlers() error {
 			http.Error(c.Writer, fmt.Sprintf("could not stat index.html: %v", err), http.StatusInternalServerError)
 			return
 		}
-		http.ServeContent(c.Writer, c.Request, fi.Name(), fi.ModTime(), f)
+		http.ServeContent(c.Writer, c.Request, fi.Name(), fi.ModTime(), f.(SeekableFile))
 	})
 
 	// Handling the shorted URLs, if no one exists, it checks
@@ -195,7 +205,7 @@ func (h *Handler) setHandlers() error {
 		},
 		// Pass down to the embedded FS, but let 404s escape via
 		// the interceptHandler.
-		gin.WrapH(interceptHandler(http.FileServer(assetBox), customErrorHandler)),
+		gin.WrapH(interceptHandler(http.FileServer(http.FS(web.BuildFS)), customErrorHandler)),
 		// not in FS; redirect to root with customURL target filled out
 		func(c *gin.Context) {
 			// if we get to this point we should not let the client cache
