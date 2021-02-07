@@ -177,7 +177,7 @@ func TestHandleInfo(t *testing.T) {
 			t.Fatalf("could not read the body: %v", err)
 		}
 		raw := makeJSON(t, gin.H{
-			"error": "Key: '.ID' Error:Field validation for 'ID' failed on the 'required' tag",
+			"error": "Key: 'ID' Error:Field validation for 'ID' failed on the 'required' tag",
 		})
 		if string(body) != raw {
 			t.Fatalf("body is not the expected one: %s", body)
