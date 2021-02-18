@@ -8,7 +8,7 @@ RUN apk add --no-cache git npm && \
 
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o "bin-release"
 
-FROM alpine:3.13.1
+FROM alpine:3.13.2
 
 WORKDIR /
 
