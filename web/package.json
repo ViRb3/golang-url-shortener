@@ -35,6 +35,6 @@
     "not op_mini all"
   ],
   "devDependencies": {
-    "http-proxy-middleware": "^0.19.1"
+    "http-proxy-middleware": "^2.0.0"
   }
 }
